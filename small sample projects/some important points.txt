@@ -1,0 +1,6 @@
+1. Get SHA1 and SHA256 
+
+C:\Users\DELL\.jdks\openjdk-17.0.1\bin>keytool -list -v -keystore "c:\Users\DELL\.android\debug.keystore" -alias androiddebugkey -storepass android -keypass android
+
+https://stackoverflow.com/questions/15727912/sha-1-fingerprint-of-keystore-certificate
+

@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "438149849643",
+    "project_id": "fir-projects-fe69e",
+    "storage_bucket": "fir-projects-fe69e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:438149849643:android:2ca37e6df04f00dd91006e",
+        "android_client_info": {
+          "package_name": "com.shakti.google_login"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhpO_d3x11af0DvVKokmCcmSc88rkiZh4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:438149849643:android:f521090c11a8b72091006e",
+        "android_client_info": {
+          "package_name": "com.shaktiemail_login_firebase"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhpO_d3x11af0DvVKokmCcmSc88rkiZh4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
