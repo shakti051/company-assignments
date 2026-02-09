@@ -9,18 +9,22 @@ class PostRepository {
 
   Future<List<Post>> fetchPosts({
     required int start,
-    int limit = 100,
+    required int limit,
   }) async {
-    final response = await dio.get(
-      '/posts',
-      queryParameters: {
-        '_start': start,
-        '_limit': limit,
-      },
-    );
+    try {
+      final response = await dio.get(
+        '/posts',
+        queryParameters: {
+          '_start': start,
+          '_limit': limit,
+        },
+      );
 
-    return (response.data as List)
-        .map((e) => Post.fromJson(e))
-        .toList();
+      return (response.data as List)
+          .map((e) => Post.fromJson(e))
+          .toList();
+    } on DioException catch (e) {     
+      throw e.error!;
+    }
   }
 }
