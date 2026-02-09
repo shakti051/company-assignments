@@ -136,8 +136,9 @@ class _PostPageState extends State<PostPage> {
               child: ListView.builder(
                 controller: _controller,
                 physics: const AlwaysScrollableScrollPhysics(),
-                itemCount: state.posts.length + 1, // 👈 important
+                itemCount: state.posts.length + 1, // important
                 itemBuilder: (context, index) {
+                  debugPrint("TOTAL POST ${state.posts.length}");
                   // ---------------- POSTS ----------------
                   if (index < state.posts.length) {
                     final post = state.posts[index];
