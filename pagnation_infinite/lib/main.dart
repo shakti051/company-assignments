@@ -9,7 +9,7 @@ import 'services/service_locator.dart';
 
 void main() {
   setupDependencies();
-
+  
   runApp(
     MultiRepositoryProvider(
       providers: [
