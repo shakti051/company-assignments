@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pagnation_infinite/blocs/posts/posts_bloc.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:pagnation_infinite/post.dart';
 
 class PostPage extends StatefulWidget {
   const PostPage({super.key});
@@ -16,13 +17,11 @@ class _PostPageState extends State<PostPage> {
   void initState() {
     super.initState();
     _controller.addListener(_onScroll);
-    // initial load
     context.read<PostBloc>().add(FetchPosts());
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_onScroll);
     _controller.dispose();
     super.dispose();
   }
@@ -30,163 +29,213 @@ class _PostPageState extends State<PostPage> {
   void _onScroll() {
     if (!_controller.hasClients) return;
 
-    final position = _controller.position;
+    final max = _controller.position.maxScrollExtent;
+    final current = _controller.position.pixels;
 
-    if (position.atEdge && position.pixels != 0) {
+    if (current >= max * 0.9) {
       context.read<PostBloc>().add(FetchPosts());
     }
+  }
+
+  /// Handles case when list is too small to scroll
+  void _checkIfNeedMore(PostLoaded state) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_controller.hasClients) return;
+
+      if (_controller.position.maxScrollExtent == 0 &&
+          !state.hasReachedEnd &&
+          !state.isFetchingMore) {
+        context.read<PostBloc>().add(FetchPosts());
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Posts'),
-      actions: [
-         BlocBuilder<PostBloc, PostState>(
-      builder: (context, state) {
-        if (state is! PostLoaded) return const SizedBox();
+      appBar: AppBar(
+        title: const Text('Posts'),
+        actions: [
+          BlocBuilder<PostBloc, PostState>(
+            builder: (context, state) {
+              if (state is! PostLoaded) return const SizedBox();
 
-        return PopupMenuButton<PostSortOrder>(
-          icon: const Icon(Icons.sort),
-          initialValue: state.sortOrder,
-          onSelected: (value) {
-            context.read<PostBloc>().add(ChangePostSort(value));
-          },
-          itemBuilder: (_) => const [
-            PopupMenuItem(
-              value: PostSortOrder.newestFirst,
-              child: Text('Newest first'),
-            ),
-            PopupMenuItem(
-              value: PostSortOrder.oldestFirst,
-              child: Text('Oldest first'),
-            ),
-          ],
-        );
-      },
-    ),
-      ],
+              return PopupMenuButton<PostSortOrder>(
+                icon: const Icon(Icons.sort),
+                initialValue: state.sortOrder,
+                onSelected: (value) {
+                  context.read<PostBloc>().add(ChangePostSort(value));
+                  _controller.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: PostSortOrder.newestFirst,
+                    child: Text('Newest first'),
+                  ),
+                  PopupMenuItem(
+                    value: PostSortOrder.oldestFirst,
+                    child: Text('Oldest first'),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
       body: BlocBuilder<PostBloc, PostState>(
         builder: (context, state) {
+          // INITIAL LOADING
           if (state is PostLoading) {
-            return Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator());
           }
-          if (state is PostLoaded) {
-            // ✅ EMPTY STATE
-            if (state.posts.isEmpty && !state.isFetchingMore) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.inbox_outlined,
-                        size: 64,
-                        color: Colors.grey,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'No posts yet',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Pull down to refresh or try again later',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          context.read<PostBloc>().add(FetchPosts());
-                        },
-                        child: const Text('Retry'),
-                      ),
-                    ],
+
+          // ERROR (first load)
+          if (state is PostError) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(state.message),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      context.read<PostBloc>().add(FetchPosts());
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
                   ),
+                ],
+              ),
+            );
+          }
+
+          // LOADED
+          if (state is PostLoaded) {
+            _checkIfNeedMore(state);
+
+            // EMPTY STATE
+            if (state.posts.isEmpty) {
+              return Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    context.read<PostBloc>().add(FetchPosts());
+                  },
+                  child: const Text('Retry'),
                 ),
               );
             }
-            // ✅ NORMAL LIST + PAGINATION
-            return Stack(
-              children: [
-                RefreshIndicator(
-                  onRefresh: () async {
-                    context.read<PostBloc>().add(RefreshPosts());
-                  },
-                  child: ListView.builder(
-                    controller: _controller,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    itemCount: state.posts.length,
-                    itemBuilder: (context, index) {
-                      final post = state.posts[index];
-                      debugPrint("Total POST ${state.posts.length}");
-                      return ListTile(
-                        title: Text(post.title),
-                        subtitle: Text(post.body),
-                        trailing: Text(
-                          post.createdAt.toIso8601String(),
-                          style: const TextStyle(fontSize: 10),
-                        ),
-                      );
-                    },
-                  ),
-                ),
 
-                // CENTER LOADER
-                if (state.isFetchingMore || state.paginationError != null)
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: SafeArea(
-                      minimum: const EdgeInsets.only(bottom: 12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+            return RefreshIndicator(
+              onRefresh: () async {
+                context.read<PostBloc>().add(RefreshPosts());
+              },
+              child: ListView.builder(
+                controller: _controller,
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: state.posts.length + 1, // 👈 important
+                itemBuilder: (context, index) {
+                  // ---------------- POSTS ----------------
+                  if (index < state.posts.length) {
+                    final post = state.posts[index];
+                    return MyCardWidget(post);
+                  }
+
+                  // ---------------- BOTTOM AREA ----------------
+
+                  // Loading more
+                  if (state.isFetchingMore) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+
+                  // Pagination error → Retry button
+                  if (state.paginationError != null) {
+                    return Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Center(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            context.read<PostBloc>().add(FetchPosts());
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
                         ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: const [
-                            BoxShadow(
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                              color: Colors.black26,
-                            ),
-                          ],
-                        ),
-                        child: state.isFetchingMore
-                            ? const SizedBox(
-                                height: 28,
-                                width: 28,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 3,
-                                ),
-                              )
-                            : TextButton.icon(
-                                onPressed: () {
-                                  context.read<PostBloc>().add(FetchPosts());
-                                },
-                                icon: const Icon(Icons.refresh),
-                                label: const Text('Retry'),
-                              ),
                       ),
-                    ),
-                  ),
-              ],
+                    );
+                  }
+
+                  // Nothing else to load
+                  return const SizedBox.shrink();
+                },
+              ),
             );
           }
-          if (state is PostError) {
-            return Center(child: Text(state.message));
-          }
 
-          return SizedBox();
+          return const SizedBox();
         },
+      ),
+    );
+  }
+
+  // ---------------- CARD UI ----------------
+
+  Widget MyCardWidget(Post post) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: Colors.blue.shade100,
+                  child: Text(
+                    post.id.toString(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    "Post ID ${post.id}",
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Text(
+                  post.createdAt.toIso8601String().substring(0, 10),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "This is preview for ${post.id}",
+              style: const TextStyle(fontSize: 14),
+            ),
+          ],
+        ),
       ),
     );
   }
