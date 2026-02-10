@@ -15,6 +15,13 @@ class PostRepository {
     required int limit,
   }) async {
     try {
+      // simulate network latency
+    await Future.delayed(const Duration(milliseconds: 600));
+
+    //  simulate random network failure
+    if (DateTime.now().millisecondsSinceEpoch % 7 == 0) {
+      throw Exception("Random network error");
+    }
       final response = await dio.get(
         '/posts',
         queryParameters: {
