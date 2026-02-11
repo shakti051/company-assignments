@@ -1,8 +1,9 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
-import 'package:pagnation_infinite/post.dart';
+import 'package:pagnation_infinite/models/post.dart';
 import 'package:pagnation_infinite/post_repository.dart';
+
 part 'posts_event.dart';
 part 'posts_state.dart';
 
@@ -19,24 +20,27 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     on<ChangePostSort>(_changeSort);
   }
 
-  Future<void> _fetchPosts(
-    FetchPosts event,
-    Emitter<PostState> emit,
-  ) async {
-    // 🛑 stop duplicate calls
+  Future<void> _fetchPosts(FetchPosts event, Emitter<PostState> emit) async {
     if (isFetching) return;
 
     final currentState = state;
 
-    // 🛑 stop when end reached
-    if (currentState is PostLoaded && currentState.hasReachedEnd) return;
+    // 🛑 Stop when no more pages
+    if (currentState is PostLoaded && currentState.nextCursor == null) {
+      return;
+    }
 
     isFetching = true;
 
-    final oldPosts =
-        currentState is PostLoaded ? currentState.posts : <Post>[];
+    final oldPosts = currentState is PostLoaded ? currentState.posts : <Post>[];
 
-    // UI loading states
+    final cursor = currentState is PostLoaded ? currentState.nextCursor : null;
+
+    final currentSortOrder = currentState is PostLoaded
+        ? currentState.sortOrder
+        : PostSortOrder.newestFirst;
+
+    // 🔹 Loading state
     if (currentState is PostLoaded) {
       emit(currentState.copyWith(isFetchingMore: true));
     } else {
@@ -44,17 +48,35 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     }
 
     try {
-      final newPosts =
-          await repository.fetchPosts(start: start, limit: limit);
+      final page = await repository.fetchPosts(cursor: cursor, limit: limit);
 
-      start += limit;
+      // 🔹 Deduplicate
+      final newItems = page.items
+          .where((item) => !oldPosts.any((e) => e.id == item.id))
+          .toList();
 
+      // 🔥 Merge old + new
+      final combined = [...oldPosts, ...newItems];
+
+      // 🔥 Re-apply sorting
+      switch (currentSortOrder) {
+        case PostSortOrder.newestFirst:
+          combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          break;
+
+        case PostSortOrder.oldestFirst:
+          combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          break;
+      }
+      print("Next cursor: ${page.nextCursor}");
+      print("Fetched items: ${page.items.length}");
       emit(
         PostLoaded(
-          posts: [...oldPosts, ...newPosts],
-          hasReachedEnd: newPosts.length < limit,
+          posts: combined,
+          nextCursor: page.nextCursor,
           isFetchingMore: false,
           paginationError: null,
+          sortOrder: currentSortOrder,
         ),
       );
     } catch (e) {
@@ -77,21 +99,38 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     RefreshPosts event,
     Emitter<PostState> emit,
   ) async {
-    start = 0;
     isFetching = false;
+
+    // 🔥 Preserve current sort order
+    final currentSortOrder = state is PostLoaded
+        ? (state as PostLoaded).sortOrder
+        : PostSortOrder.newestFirst;
 
     emit(PostLoading());
 
     try {
-      final posts =
-          await repository.fetchPosts(start: start, limit: limit);
+      final page = await repository.fetchPosts(cursor: null, limit: limit);
 
-      start += limit;
+      final sortedPosts = List<Post>.from(page.items);
+
+      // 🔥 Apply sorting before emitting
+      switch (currentSortOrder) {
+        case PostSortOrder.newestFirst:
+          sortedPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          break;
+
+        case PostSortOrder.oldestFirst:
+          sortedPosts.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          break;
+      }
 
       emit(
         PostLoaded(
-          posts: posts,
-          hasReachedEnd: posts.length < limit,
+          posts: sortedPosts,
+          nextCursor: page.nextCursor,
+          isFetchingMore: false,
+          paginationError: null,
+          sortOrder: currentSortOrder, // ✅ preserve
         ),
       );
     } catch (e) {
@@ -99,10 +138,7 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     }
   }
 
-  void _changeSort(
-    ChangePostSort event,
-    Emitter<PostState> emit,
-  ) {
+  void _changeSort(ChangePostSort event, Emitter<PostState> emit) {
     if (state is! PostLoaded) return;
 
     final current = state as PostLoaded;
@@ -114,11 +150,6 @@ class PostBloc extends Bloc<PostEvent, PostState> {
       sorted.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     }
 
-    emit(
-      current.copyWith(
-        posts: sorted,
-        sortOrder: event.sortOrder,
-      ),
-    );
+    emit(current.copyWith(posts: sorted, sortOrder: event.sortOrder));
   }
 }

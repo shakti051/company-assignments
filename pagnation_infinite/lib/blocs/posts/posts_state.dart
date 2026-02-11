@@ -1,9 +1,6 @@
 part of 'posts_bloc.dart';
 
-enum PostSortOrder {
-  newestFirst,
-  oldestFirst,
-}
+enum PostSortOrder { newestFirst, oldestFirst }
 
 abstract class PostState extends Equatable {
   const PostState();
@@ -18,29 +15,29 @@ class PostLoading extends PostState {}
 
 class PostLoaded extends PostState {
   final List<Post> posts;
-  final bool hasReachedEnd;
+  final String? nextCursor;
   final bool isFetchingMore;
   final String? paginationError;
   final PostSortOrder sortOrder;
 
   const PostLoaded({
     required this.posts,
-    required this.hasReachedEnd,
-    this.isFetchingMore = false,
-    this.paginationError,
-    this.sortOrder = PostSortOrder.newestFirst,
+    required this.nextCursor,
+    required this.isFetchingMore,
+    required this.paginationError,
+    required this.sortOrder,
   });
 
   PostLoaded copyWith({
     List<Post>? posts,
-    bool? hasReachedEnd,
+    String? nextCursor,
     bool? isFetchingMore,
     String? paginationError,
     PostSortOrder? sortOrder,
   }) {
     return PostLoaded(
       posts: posts ?? this.posts,
-      hasReachedEnd: hasReachedEnd ?? this.hasReachedEnd,
+      nextCursor: nextCursor ?? this.nextCursor,
       isFetchingMore: isFetchingMore ?? this.isFetchingMore,
       paginationError: paginationError,
       sortOrder: sortOrder ?? this.sortOrder,
@@ -48,7 +45,13 @@ class PostLoaded extends PostState {
   }
 
   @override
-  List<Object?> get props =>[posts, hasReachedEnd, isFetchingMore, paginationError,sortOrder];
+  List<Object?> get props => [
+    posts,
+    nextCursor,
+    isFetchingMore,
+    paginationError,
+    sortOrder,
+  ];
 }
 
 class PostError extends PostState {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pagnation_infinite/blocs/posts/posts_bloc.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:pagnation_infinite/post.dart';
+import 'package:pagnation_infinite/models/post.dart';
 
 class PostPage extends StatefulWidget {
   const PostPage({super.key});
@@ -26,29 +26,34 @@ class _PostPageState extends State<PostPage> {
     super.dispose();
   }
 
-  void _onScroll() {
+ void _onScroll() {
+  print("Scrolling...");
+  if (!_controller.hasClients) return;
+
+  final position = _controller.position;
+
+  print("Extent after: ${position.extentAfter}");
+
+  if (position.extentAfter < 200) {
+    print("Triggering pagination 🔥");
+    context.read<PostBloc>().add(FetchPosts());
+  }
+}
+
+  // Handles case when list is too small to scroll
+  void _checkIfNeedMore() {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
     if (!_controller.hasClients) return;
 
-    final max = _controller.position.maxScrollExtent;
-    final current = _controller.position.pixels;
+    final position = _controller.position;
 
-    if (current >= max * 0.9) {
+    // If after adding new items we are still near bottom
+    if (position.extentAfter < 300) {
       context.read<PostBloc>().add(FetchPosts());
     }
-  }
+  });
+}
 
-  /// Handles case when list is too small to scroll
-  void _checkIfNeedMore(PostLoaded state) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_controller.hasClients) return;
-
-      if (_controller.position.maxScrollExtent == 0 &&
-          !state.hasReachedEnd &&
-          !state.isFetchingMore) {
-        context.read<PostBloc>().add(FetchPosts());
-      }
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -115,7 +120,7 @@ class _PostPageState extends State<PostPage> {
 
           // LOADED
           if (state is PostLoaded) {
-            _checkIfNeedMore(state);
+              _checkIfNeedMore();
 
             // EMPTY STATE
             if (state.posts.isEmpty) {
@@ -133,12 +138,13 @@ class _PostPageState extends State<PostPage> {
               onRefresh: () async {
                 context.read<PostBloc>().add(RefreshPosts());
               },
-              child: ListView.builder(
-                controller: _controller,
+              child: 
+              ListView.builder(
+                controller: _controller,       
                 physics: const AlwaysScrollableScrollPhysics(),
-                itemCount: state.posts.length + 1, // important
+                itemCount: state.posts.length + (state.isFetchingMore ? 1 : 0), // important
                 itemBuilder: (context, index) {
-                  debugPrint("TOTAL POST ${state.posts.length}");
+                  debugPrint("TOTAL POSTS: ${state.posts.length}");
                   // ---------------- POSTS ----------------
                   if (index < state.posts.length) {
                     final post = state.posts[index];
@@ -190,9 +196,7 @@ class _PostPageState extends State<PostPage> {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -223,10 +227,7 @@ class _PostPageState extends State<PostPage> {
                 ),
                 Text(
                   post.createdAt.toIso8601String().substring(0, 10),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey,
-                  ),
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
               ],
             ),
