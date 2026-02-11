@@ -4,12 +4,11 @@ import 'package:pagnation_infinite/blocs/posts/posts_bloc.dart';
 import 'package:pagnation_infinite/post_repository.dart';
 import 'package:pagnation_infinite/screens/post_page.dart';
 import 'package:pagnation_infinite/services/dio_client.dart';
-
 import 'services/service_locator.dart';
 
 void main() {
   setupDependencies();
-
+  
   runApp(
     MultiRepositoryProvider(
       providers: [

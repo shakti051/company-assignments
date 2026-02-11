@@ -20,7 +20,9 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     on<ChangePostSort>(_changeSort);
   }
 
+
   Future<void> _fetchPosts(FetchPosts event, Emitter<PostState> emit) async {
+    // 🛑 stop duplicate calls 
     if (isFetching) return;
 
     final currentState = state;
@@ -68,8 +70,8 @@ class PostBloc extends Bloc<PostEvent, PostState> {
           combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
           break;
       }
-      print("Next cursor: ${page.nextCursor}");
-      print("Fetched items: ${page.items.length}");
+      debugPrint("Next cursor: ${page.nextCursor}");
+      debugPrint("Fetched items: ${page.items.length}");
       emit(
         PostLoaded(
           posts: combined,
@@ -126,7 +128,7 @@ class PostBloc extends Bloc<PostEvent, PostState> {
 
       emit(
         PostLoaded(
-          posts: sortedPosts,
+          posts: sortedPosts, //
           nextCursor: page.nextCursor,
           isFetchingMore: false,
           paginationError: null,

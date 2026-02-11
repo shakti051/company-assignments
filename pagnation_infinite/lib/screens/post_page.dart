@@ -27,15 +27,15 @@ class _PostPageState extends State<PostPage> {
   }
 
  void _onScroll() {
-  print("Scrolling...");
+  debugPrint("Scrolling...");
   if (!_controller.hasClients) return;
 
   final position = _controller.position;
 
-  print("Extent after: ${position.extentAfter}");
+  debugPrint("Extent after: ${position.extentAfter}");
 
   if (position.extentAfter < 200) {
-    print("Triggering pagination 🔥");
+    debugPrint("Triggering pagination 🔥");
     context.read<PostBloc>().add(FetchPosts());
   }
 }
@@ -44,9 +44,8 @@ class _PostPageState extends State<PostPage> {
   void _checkIfNeedMore() {
   WidgetsBinding.instance.addPostFrameCallback((_) {
     if (!_controller.hasClients) return;
-
+    
     final position = _controller.position;
-
     // If after adding new items we are still near bottom
     if (position.extentAfter < 300) {
       context.read<PostBloc>().add(FetchPosts());
