@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-
 import 'package:dio/dio.dart';
 import 'package:pagnation_infinite/models/page.dart';
 import 'package:pagnation_infinite/models/post.dart';
@@ -11,9 +10,8 @@ class PostRepository {
 
   PostRepository(this.dio);
 
-  Future<MyPage<Post>> fetchPosts({
-    String? cursor,
-    required int limit,
+  Future<MyPage<Post>> fetchPosts({String? cursor, required int limit,
+  String? query,
   }) async {
     try {
       // 🔹 Convert cursor to start index
@@ -29,9 +27,8 @@ class PostRepository {
 
       final response = await dio.get(
         '/posts',
-        queryParameters: {
-          '_start': start,
-          '_limit': limit,
+        queryParameters: {'_start': start, '_limit': limit,
+        if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
         },
       );
 
@@ -41,11 +38,10 @@ class PostRepository {
 
       // 🔹 Calculate next cursor
       final next = start + limit;
-       
-     
+
       return MyPage(
-       items:  posts,
-       nextCursor: posts.isEmpty ? null : next.toString(),
+        items: posts,
+        nextCursor: posts.isEmpty ? null : next.toString(),
       );
     } on DioException catch (e) {
       final error = e.error;
@@ -58,4 +54,3 @@ class PostRepository {
     }
   }
 }
-

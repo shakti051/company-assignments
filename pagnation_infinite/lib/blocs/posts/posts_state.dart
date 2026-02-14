@@ -19,6 +19,10 @@ class PostLoaded extends PostState {
   final bool isFetchingMore;
   final String? paginationError;
   final PostSortOrder sortOrder;
+  // 👇 NEW
+  final String searchQuery;
+  final bool hasReachedEnd;
+  final String? failureMessage;
 
   const PostLoaded({
     required this.posts,
@@ -26,6 +30,9 @@ class PostLoaded extends PostState {
     required this.isFetchingMore,
     required this.paginationError,
     required this.sortOrder,
+    this.hasReachedEnd = false,
+    this.searchQuery = '',
+    this.failureMessage
   });
 
   PostLoaded copyWith({
@@ -34,13 +41,19 @@ class PostLoaded extends PostState {
     bool? isFetchingMore,
     String? paginationError,
     PostSortOrder? sortOrder,
+    String? searchQuery,
+    bool? hasReachedEnd,
+    String? failureMessage
   }) {
     return PostLoaded(
       posts: posts ?? this.posts,
       nextCursor: nextCursor ?? this.nextCursor,
       isFetchingMore: isFetchingMore ?? this.isFetchingMore,
-      paginationError: paginationError,
+      paginationError: paginationError ?? this.paginationError,
       sortOrder: sortOrder ?? this.sortOrder,
+      searchQuery: searchQuery ?? this.searchQuery,
+      hasReachedEnd: hasReachedEnd ?? this.hasReachedEnd,
+      failureMessage: failureMessage
     );
   }
 
@@ -51,6 +64,9 @@ class PostLoaded extends PostState {
     isFetchingMore,
     paginationError,
     sortOrder,
+    searchQuery,
+    hasReachedEnd,
+    failureMessage
   ];
 }
 

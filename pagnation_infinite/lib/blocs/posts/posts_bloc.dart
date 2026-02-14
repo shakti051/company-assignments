@@ -9,93 +9,266 @@ part 'posts_state.dart';
 
 class PostBloc extends Bloc<PostEvent, PostState> {
   final PostRepository repository;
-  static const int limit = 10;
+  static const int limit = 20;
 
   int start = 0;
   bool isFetching = false;
-
+    
   PostBloc(this.repository) : super(PostInitial()) {
     on<FetchPosts>(_fetchPosts);
     on<RefreshPosts>(_refreshPosts);
     on<ChangePostSort>(_changeSort);
+    on<SearchPosts>(_onSearchPosts);
+    on<LikePost>(_onLikePost);    
   }
 
 
-  Future<void> _fetchPosts(FetchPosts event, Emitter<PostState> emit) async {
-    // 🛑 stop duplicate calls 
-    if (isFetching) return;
+  Future<void> _onLikePost(
+  LikePost event,
+  Emitter<PostState> emit,
+) async {
+  if (state is! PostLoaded) return;
 
-    final currentState = state;
+  final currentState = state as PostLoaded;
 
-    // 🛑 Stop when no more pages
-    if (currentState is PostLoaded && currentState.nextCursor == null) {
-      return;
+  final updatedPosts = currentState.posts.map((post) {
+    if (post.id == event.postId) {
+      return post.copyWith(isLiked: !post.isLiked);
+    }
+    return post;
+  }).toList();
+
+  // ✅ Optimistic update
+  emit(currentState.copyWith(posts: updatedPosts, failureMessage: null));
+
+  try {
+    await Future.delayed(const Duration(seconds: 1));
+
+    final isFailure = DateTime.now().millisecond % 2 == 0;
+
+    if (isFailure) {
+      throw Exception("API Failed");
     }
 
-    isFetching = true;
+  } catch (e) {
+    // ❌ Rollback
+    emit(currentState.copyWith(
+      failureMessage: "Failed to like post. Please try again.",
+    ));
+  }
+}
+  Future<void> _onSearchPosts(
+  SearchPosts event,
+  Emitter<PostState> emit,
+) async {
+  if (state is! PostLoaded) return;
 
-    final oldPosts = currentState is PostLoaded ? currentState.posts : <Post>[];
+  final currentState = state as PostLoaded;
+  final query = event.query.trim(); // ✅ important
 
-    final cursor = currentState is PostLoaded ? currentState.nextCursor : null;
+  // If query is empty → reset
+  if (query.isEmpty) {
+    emit(
+      currentState.copyWith(
+        searchQuery: '',
+        posts: [],
+        hasReachedEnd: false,
+        paginationError: null,
+      ),
+    );
 
-    final currentSortOrder = currentState is PostLoaded
-        ? currentState.sortOrder
-        : PostSortOrder.newestFirst;
+    add(FetchPosts(reset: true));
+    return;
+  }
 
-    // 🔹 Loading state
-    if (currentState is PostLoaded) {
-      emit(currentState.copyWith(isFetchingMore: true));
+  // Perform search
+  emit(
+    currentState.copyWith(
+      searchQuery: query, // ✅ always use trimmed query
+      posts: [],
+      hasReachedEnd: false,
+      paginationError: null,
+      isFetchingMore: false,
+    ),
+  );
+
+  add(FetchPosts(reset: true));
+}
+
+  Future<void> _fetchPosts(
+  FetchPosts event,
+  Emitter<PostState> emit,
+) async {
+  
+  // ✅ Allow reset even if already fetching
+  if (isFetching && !event.reset) return;
+
+  final currentState = state;
+
+  String? cursor;
+  List<Post> oldPosts = [];
+  PostSortOrder currentSortOrder = PostSortOrder.newestFirst;
+  String? searchQuery;
+
+  if (currentState is PostLoaded) {
+    searchQuery = currentState.searchQuery; // ✅ get latest query
+    currentSortOrder = currentState.sortOrder;
+
+    if (event.reset) {
+      cursor = null;
+      oldPosts = [];
     } else {
-      emit(PostLoading());
+      if (currentState.nextCursor == null) return;
+
+      cursor = currentState.nextCursor;
+      oldPosts = currentState.posts;
+
+      emit(currentState.copyWith(
+        isFetchingMore: true,
+        paginationError: null,
+      ));
+    }
+  } else {
+    emit(PostLoading());
+  }
+
+  isFetching = true;
+
+  try {
+    final page = await repository.fetchPosts(
+      cursor: cursor,
+      limit: limit,
+      query: (searchQuery == null || searchQuery.isEmpty)
+          ? null
+          : searchQuery,
+    );
+
+    final newItems = page.items
+        .where((item) => !oldPosts.any((e) => e.id == item.id))
+        .toList();
+
+    final combined = [...oldPosts, ...newItems];
+
+    switch (currentSortOrder) {
+      case PostSortOrder.newestFirst:
+        combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+      case PostSortOrder.oldestFirst:
+        combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        break;
     }
 
-    try {
-      final page = await repository.fetchPosts(cursor: cursor, limit: limit);
-
-      // 🔹 Deduplicate
-      final newItems = page.items
-          .where((item) => !oldPosts.any((e) => e.id == item.id))
-          .toList();
-
-      // 🔥 Merge old + new
-      final combined = [...oldPosts, ...newItems];
-
-      // 🔥 Re-apply sorting
-      switch (currentSortOrder) {
-        case PostSortOrder.newestFirst:
-          combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          break;
-
-        case PostSortOrder.oldestFirst:
-          combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-          break;
-      }
-      debugPrint("Next cursor: ${page.nextCursor}");
-      debugPrint("Fetched items: ${page.items.length}");
+    emit(
+      PostLoaded(
+        posts: combined,
+        nextCursor: page.nextCursor,
+        isFetchingMore: false,
+        paginationError: null,
+        sortOrder: currentSortOrder,
+        searchQuery: searchQuery ?? '',
+      ),
+    );
+  } catch (e) {
+    if (currentState is PostLoaded) {
       emit(
-        PostLoaded(
-          posts: combined,
-          nextCursor: page.nextCursor,
+        currentState.copyWith(
           isFetchingMore: false,
-          paginationError: null,
-          sortOrder: currentSortOrder,
+          paginationError: e.toString(),
         ),
       );
-    } catch (e) {
-      if (currentState is PostLoaded) {
-        emit(
-          currentState.copyWith(
-            isFetchingMore: false,
-            paginationError: e.toString(),
-          ),
-        );
-      } else {
-        emit(PostError(e.toString()));
-      }
-    } finally {
-      isFetching = false;
+    } else {
+      emit(PostError(e.toString()));
     }
+  } finally {
+    isFetching = false;
   }
+}
+  // Future<void> _fetchPosts(FetchPosts event, Emitter<PostState> emit) async {
+  //   // 🛑 Prevent duplicate calls
+  //   if (isFetching) return;
+
+  //   final currentState = state;
+
+  //   String? cursor;
+  //   List<Post> oldPosts = [];
+  //   PostSortOrder currentSortOrder = PostSortOrder.newestFirst;
+  //   String searchQuery = '';
+
+  //   if (currentState is PostLoaded) {
+  //     // ✅ If reset → start fresh
+  //     if (event.reset) {
+  //       cursor = null;
+  //       oldPosts = [];
+  //     } else {
+  //       // 🛑 Stop if no more pages
+  //       if (currentState.nextCursor == null) return;
+
+  //       cursor = currentState.nextCursor;
+  //       oldPosts = currentState.posts;
+  //     }
+
+  //     currentSortOrder = currentState.sortOrder;
+  //     searchQuery = currentState.searchQuery;
+
+  //     emit(currentState.copyWith(isFetchingMore: true, paginationError: null));
+  //   } else {
+  //     // First load
+  //     emit(PostLoading());
+  //   }
+
+  //   isFetching = true;
+
+  //   try {
+  //     final page = await repository.fetchPosts(
+  //       cursor: cursor,
+  //       limit: limit,
+  //       query: searchQuery.isEmpty ? null : searchQuery
+  //     );
+
+  //     // 🔹 Deduplicate
+  //     final newItems = page.items
+  //         .where((item) => !oldPosts.any((e) => e.id == item.id))
+  //         .toList();
+
+  //     // 🔹 Merge
+  //     final combined = [...oldPosts, ...newItems];
+
+  //     // 🔹 Apply sorting
+  //     switch (currentSortOrder) {
+  //       case PostSortOrder.newestFirst:
+  //         combined.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  //         break;
+  //       case PostSortOrder.oldestFirst:
+  //         combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  //         break;
+  //     }
+
+  //     emit(
+  //       PostLoaded(
+  //         posts: combined,
+  //         nextCursor: page.nextCursor,
+  //         isFetchingMore: false,
+  //         paginationError: null,
+  //         sortOrder: currentSortOrder,
+  //         searchQuery: searchQuery, // ✅ IMPORTANT
+  //       ),
+  //     );
+  //   } catch (e) {
+  //     if (currentState is PostLoaded) {
+  //       emit(
+  //         currentState.copyWith(
+  //           isFetchingMore: false,
+  //           paginationError: e.toString(),
+  //         ),
+  //       );
+  //     } else {
+  //       emit(PostError(e.toString()));
+  //     }
+  //   } finally {
+  //     isFetching = false;
+  //   }
+  // }
+
 
   Future<void> _refreshPosts(
     RefreshPosts event,

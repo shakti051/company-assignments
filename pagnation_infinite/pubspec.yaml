@@ -39,6 +39,7 @@ dependencies:
   equatable: ^2.0.8
   dio: ^5.9.1
   get_it: ^9.2.0
+  bloc_concurrency: ^0.3.0
 
 dev_dependencies:
   flutter_test:
